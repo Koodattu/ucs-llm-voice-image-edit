@@ -6,7 +6,7 @@ import shutil
 import string
 import whisper
 from flask import Flask, render_template, request, jsonify, send_file, send_from_directory
-from flask_socketio import SocketIO, emit
+from flask_socketio import SocketIO, emit, disconnect
 from pydub import AudioSegment
 import torch
 from diffusers import EulerAncestralDiscreteScheduler, StableDiffusionInstructPix2PixPipeline, StableVideoDiffusionPipeline, StableDiffusionXLPipeline, UNet2DConditionModel, EulerDiscreteScheduler,StableDiffusionXLInstructPix2PixPipeline
@@ -24,6 +24,7 @@ import pandas as pd
 app = Flask(__name__, template_folder=".")
 CORS(app)
 socketio = SocketIO(app, async_mode="threading")
+PASSWORD = "your_password_here"
 
 cache_dir = "./model_cache"
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -104,7 +105,18 @@ def save_concatenated_audio():
 
 @socketio.on('connect')
 def handle_connect():
-    print('Client connected')
+    if request.args.get('password') != PASSWORD:
+        disconnect()
+    else:
+        print('Client connected')
+
+@socketio.on('authenticate')
+def handle_authentication(data):
+    if data.get('password') == PASSWORD:
+        emit('auth_status', {'status': 'success'})
+    else:
+        emit('auth_status', {'status': 'failure'})
+        disconnect()
 
 @socketio.on("lang_select")
 def handle_lang_select(data):
@@ -135,8 +147,14 @@ def handle_translation():
     print(f"Translation: {result['text']}")
     emit("translation", result["text"])
 
+def check_password(headers):
+    if headers.get("Password") == PASSWORD:
+        return jsonify({"error": "Unauthorized"}), 401
+
+
 @app.route("/process_command", methods=["POST"])
 def process_command():
+    check_password(request.headers)
     data = request.json
     command = data.get("command")
     image = data.get("image")

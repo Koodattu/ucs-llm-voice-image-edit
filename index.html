@@ -305,9 +305,15 @@
   </head>
   <body>
     <div class="main-page" id="main_page">
-      <img class="logo-image" src="./assets/gpt-lab-sjk-v2.png" />
+      <img
+        class="logo-image"
+        src="https://raw.githubusercontent.com/Koodattu/ucs-llm-voice-image-edit/main/assets/gpt-lab-sjk-v2.png"
+      />
       <div class="bubble hb">Koita vaikka sanoa notta "tees mulle uus kuva tekoälyagentista"</div>
-      <img class="jr-image" src="./assets/jr.png" />
+      <img
+        class="jr-image"
+        src="https://raw.githubusercontent.com/Koodattu/ucs-llm-voice-image-edit/main/assets/jr.png"
+      />
       <h1>Tietoprovinssi Demo - Voice Guided AI Image Editing - GPT Lab Seinäjoki</h1>
 
       <div class="controls-content">
@@ -418,6 +424,11 @@
       toggleRecording.addEventListener("change", () => {
         recordingEnabled = toggleRecording.checked;
         updateMicStatusStyle();
+        if (recordingEnabled) {
+          myvad.start();
+        } else {
+          myvad.pause();
+        }
       });
 
       async function startMicVAD(stream) {
@@ -470,9 +481,37 @@
         myvad.start();
       }
 
+      // Function to prompt for password
+      function promptForPassword() {
+        let password = localStorage.getItem("password");
+        if (!password) {
+          password = prompt("Enter the password:");
+          localStorage.setItem("password", password);
+        }
+        return password;
+      }
+
+      // Function to authenticate with the server
+      function authenticateSocket(socket, password) {
+        socket.emit("authenticate", { password: password });
+        socket.on("auth_status", (data) => {
+          if (data.status !== "success") {
+            alert("Authentication failed!");
+            localStorage.removeItem("password");
+            location.reload();
+          }
+        });
+      }
+
       async function main() {
+        const password = promptForPassword();
         updateMicStatusStyle();
-        socket = io("http://localhost:5001");
+
+        const socket = io("http://83.245.221.51:5001", {
+          query: { password: password },
+        });
+
+        authenticateSocket(socket, password);
 
         socket.on("connect", () => {
           console.log("Connected to server");
@@ -488,7 +527,7 @@
         socket.on("translation", async (data) => {
           system_status.innerText = "Translation received";
           translation.value = data;
-          await processCommand(generated_image.alt, data);
+          await processCommand(generated_image.alt, data, password);
         });
 
         socket.on("llm_response", async (data) => {
@@ -546,14 +585,15 @@
       }
       main();
 
-      async function processCommand(image, command) {
+      async function processCommand(image, command, password) {
         backendProcessing = true;
         updateMicStatusStyle();
         system_status.innerText = "Processing command...";
-        const response = await fetch("/process_command", {
+        const response = await fetch("83.245.221.51:5001/process_command", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            Password: password,
           },
           body: JSON.stringify({ image, command }),
         });
@@ -561,7 +601,7 @@
         if (json.error) {
           system_status.innerText = "Error: " + json.error;
         } else {
-          generated_image.src = `/images/${json.image}`;
+          generated_image.src = `83.245.221.51:5001/images/${json.image}`;
           generated_image.alt = json.image;
           system_status.innerText = "Done! Waiting for input...";
         }
@@ -609,7 +649,7 @@
       });
 
       function updateGallery() {
-        fetch("/images")
+        fetch("83.245.221.51:5001/images")
           .then((response) => response.json())
           .then((images) => {
             const gallery = document.getElementById("gallery");
@@ -619,12 +659,12 @@
                 container.className = "image-container";
 
                 const img = document.createElement("img");
-                img.src = `/images/${image.name}`;
+                img.src = `83.245.221.51:5001/images/${image.name}`;
                 img.alt = image.name;
                 img.addEventListener("click", () => {
                   main_page.style.display = "flex";
                   gallery.style.display = "none";
-                  generated_image.src = `/images/${image.name}`;
+                  generated_image.src = `83.245.221.51:5001/images/${image.name}`;
                   generated_image.alt = image.name;
                 });
 
